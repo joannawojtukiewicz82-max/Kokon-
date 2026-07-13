@@ -3,37 +3,38 @@
 // Zastępuje window.storage (dostępne tylko wewnątrz artefaktów Claude)
 // prawdziwym, trwałym przechowywaniem danych na Netlify.
 
-const { getStore } = require('@netlify/blobs');
+import { getStore } from '@netlify/blobs';
 
-exports.handler = async (event) => {
+export default async (req) => {
+  const url = new URL(req.url);
+  const key = url.searchParams.get('key');
   const headers = { 'Content-Type': 'application/json' };
 
-  const key = event.queryStringParameters && event.queryStringParameters.key;
   if (!key) {
-    return { statusCode: 400, headers, body: JSON.stringify({ error: 'Brak parametru "key"' }) };
+    return new Response(JSON.stringify({ error: 'Brak parametru "key"' }), { status: 400, headers });
   }
 
   const store = getStore('kokon-data');
 
   try {
-    if (event.httpMethod === 'GET') {
+    if (req.method === 'GET') {
       const value = await store.get(key, { type: 'text' });
-      return { statusCode: 200, headers, body: JSON.stringify({ key, value: value === undefined ? null : value }) };
+      return new Response(JSON.stringify({ key, value: value === undefined ? null : value }), { headers });
     }
 
-    if (event.httpMethod === 'POST' || event.httpMethod === 'PUT') {
-      const body = JSON.parse(event.body || '{}');
+    if (req.method === 'POST' || req.method === 'PUT') {
+      const body = await req.json();
       await store.set(key, body.value);
-      return { statusCode: 200, headers, body: JSON.stringify({ key, value: body.value }) };
+      return new Response(JSON.stringify({ key, value: body.value }), { headers });
     }
 
-    if (event.httpMethod === 'DELETE') {
+    if (req.method === 'DELETE') {
       await store.delete(key);
-      return { statusCode: 200, headers, body: JSON.stringify({ key, deleted: true }) };
+      return new Response(JSON.stringify({ key, deleted: true }), { headers });
     }
 
-    return { statusCode: 405, headers, body: JSON.stringify({ error: 'Metoda niedozwolona' }) };
+    return new Response(JSON.stringify({ error: 'Metoda niedozwolona' }), { status: 405, headers });
   } catch (err) {
-    return { statusCode: 500, headers, body: JSON.stringify({ error: String(err && err.message || err) }) };
+    return new Response(JSON.stringify({ error: String(err && err.message || err) }), { status: 500, headers });
   }
 };
